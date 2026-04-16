@@ -185,11 +185,16 @@ class GeminiProvider(TextGenerationProvider, LiveAudioProvider, TranscriptionPro
             return None
 
     def transcribe_audio(self, audio_bytes: bytes) -> str:
-        # Gemini does not yet offer a separate transcription endpoint;
-        # fall back to sending audio to the multimodal model.
-        if not audio_bytes:
-            return ''
-        logger.info('Gemini transcription: sending audio to multimodal model.')
+        # Gemini does not yet offer a separate transcription endpoint.
+        # When using the non-Live audio path with Gemini, transcription is
+        # unavailable — use the Live API path (supports_live_audio) instead.
+        if audio_bytes:
+            logger.warning(
+                'GeminiProvider.transcribe_audio() called but Gemini has no standalone '
+                'transcription endpoint. Audio will NOT be transcribed. '
+                'Set INTERVIEW_PROVIDER=openai for Whisper-based transcription, or '
+                'ensure GEMINI_API_KEY is set so the Live API path is used.'
+            )
         return ''
 
     def evaluate_recording(self, transcript: str, video_path: Optional[str] = None) -> dict:

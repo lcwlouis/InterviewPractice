@@ -30,20 +30,28 @@ def render() -> None:
         'default_country': settings.default_country_preset,
     })
 
+    if settings.interview_provider.lower() == 'openai' and not settings.openai_api_key:
+        st.error('❌ OPENAI_API_KEY is not set — LLM features and audio transcription will not work.')
+    elif settings.interview_provider.lower() == 'gemini' and not settings.gemini_api_key:
+        st.error('❌ GEMINI_API_KEY is not set — LLM features and Gemini Live API will not work.')
+
     st.subheader('Audio Modes')
     st.markdown('''
 The interview session supports three audio modes:
 
-1. **Live audio conversation** — Mic input → Whisper transcription → LLM response → Edge TTS playback.
-   This is the default mode when audio is enabled. Answers are automatically submitted
-   after silence detection (when auto-submit is on).
+1. **Gemini Live API** (Gemini only, when `GEMINI_API_KEY` is set and `google-genai` is installed) —
+   Browser mic audio → Gemini Live WebSocket → real-time AI interviewer response with audio playback.
+   Input transcription and AI response text are both shown. This is the most natural, low-latency mode.
 
-2. **Audio-in → text-out** — Mic capture → Whisper transcription → text response displayed.
-   Use this when you prefer to read the interviewer's questions.
+2. **Standard audio transcription** (OpenAI only) — Mic capture → Whisper transcription → LLM text response
+   → Edge TTS audio playback. Use this when INTERVIEW_PROVIDER=openai.
 
 3. **Full multimodal** — Audio + video recording → body language analysis via GPT-4o/Gemini Vision.
    Enable video recording in Setup to activate webcam capture. Video clips are analyzed
    at the end of the session for body language, confidence, and presence observations.
+
+> **Note:** The Gemini provider does not support standalone audio transcription (no Whisper equivalent).
+> When Gemini is active and the Live API is unavailable, use typed input instead.
     ''')
 
     st.subheader('Environment Variables')
@@ -54,6 +62,7 @@ The interview session supports three audio modes:
         'OPENAI_MODEL=gpt-4.1-mini         # Model for text generation\n'
         'GEMINI_API_KEY=...                 # Google Gemini API key\n'
         'GEMINI_MODEL=gemini-2.5-pro        # Model for text generation\n'
+        'GEMINI_LIVE_MODEL=gemini-2.0-flash-live-001  # Model for Live (real-time audio) API\n'
         '\n'
         '# Search / Research\n'
         'SEARCH_API_KEY=tvly-...            # Tavily API key for web research\n'

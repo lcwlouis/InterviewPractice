@@ -107,6 +107,13 @@ class EvaluationPipeline:
             except Exception:
                 logger.warning('LLM decomposition parse failed — using heuristic')
         # Fallback to heuristic
+        if self.text_provider is not None:
+            logger.warning(
+                'Falling back to heuristic answer decomposition for question %s '
+                '(LLM call failed or returned invalid JSON). '
+                'Evaluation quality will be reduced.',
+                question_id,
+            )
         return self._heuristic_decompose(question_id, answer_text)
 
     def score_rubric(self, analysis: AnswerAnalysis, interview_type: InterviewType) -> RubricScore:

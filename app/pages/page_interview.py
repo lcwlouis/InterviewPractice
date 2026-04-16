@@ -10,6 +10,7 @@ When WebRTC video is enabled, frames are recorded for body language analysis.
 
 from __future__ import annotations
 
+import logging
 import sys
 import time
 import uuid
@@ -20,6 +21,8 @@ import streamlit as st
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+
+logger = logging.getLogger(__name__)
 
 from backend.config import get_settings
 from evaluation.pipeline import EvaluationPipeline
@@ -62,8 +65,13 @@ def _play_tts(text: str, speaker: str = 'Interviewer') -> None:
     """Synthesize and play TTS audio for interviewer speech."""
     rec = _ensure_recording_service()
     audio_bytes = rec.synthesize_speech(text, speaker=speaker)
-    if audio_bytes and len(audio_bytes) > 100:
-        st.audio(audio_bytes, format='audio/mp3', autoplay=True)
+    if not audio_bytes or len(audio_bytes) <= 100:
+        st.warning(
+            '⚠️ TTS audio unavailable — interviewer text shown above instead. '
+            'Check that the `edge-tts` package is installed and the network is reachable.'
+        )
+        return
+    st.audio(audio_bytes, format='audio/mp3', autoplay=True)
 
 
 def _build_live_system_prompt(state: SessionState) -> str:
@@ -185,6 +193,21 @@ def render() -> None:
 
     # ── Start interview ──
     if not st.session_state.interview_started:
+        # ── Provider health check ──
+        settings = get_settings()
+        if settings.interview_provider.lower() == 'gemini' and not settings.gemini_api_key:
+            st.error(
+                '❌ **GEMINI_API_KEY is not set.** '
+                'LLM follow-ups, evaluation, and Live audio will all fall back to heuristics. '
+                'Set GEMINI_API_KEY in your .env file and restart the app.'
+            )
+        elif settings.interview_provider.lower() == 'openai' and not settings.openai_api_key:
+            st.error(
+                '❌ **OPENAI_API_KEY is not set.** '
+                'LLM follow-ups, evaluation, and audio transcription will fall back to heuristics. '
+                'Set OPENAI_API_KEY in your .env file and restart the app.'
+            )
+
         if st.button('▶️ Start Interview', type='primary'):
             bundle = _ensure_providers()
             session_state = SessionState(
@@ -291,6 +314,16 @@ def render() -> None:
                     st.rerun()
         else:
             st.markdown('**Option 1: Speak your answer** (audio will be transcribed automatically)')
+            # Warn if Gemini is active — it has no standalone transcription endpoint
+            if not bundle.live_audio_provider.supports_live_audio():
+                settings = get_settings()
+                if settings.interview_provider.lower() == 'gemini':
+                    st.warning(
+                        '⚠️ Gemini provider is active but the Live API is not available '
+                        '(missing `google-genai` package or no API key). '
+                        'Audio transcription will fail silently — type your answer instead, '
+                        'or switch to INTERVIEW_PROVIDER=openai for Whisper transcription.'
+                    )
             transcription = _handle_audio_input(state, engine)
             if transcription:
                 answer = transcription
@@ -381,4 +414,9 @@ def _save_session():
             store.save_competency_scores(st.session_state.session_id or 'unknown', comp_scores)
             store.close()
     except Exception:
-        pass  # Don't break the UI if persistence fails
+        logger.exception('Failed to persist interview session to database')
+        st.warning(
+            '⚠️ Session could not be saved to the database — '
+            'your results will not appear in History. '
+            'Check the app logs for details.'
+        )

@@ -43,7 +43,11 @@ class ResearchService:
             return []
         TavilyClient = _get_tavily()
         if TavilyClient is None or not self.api_key:
-            logger.info('Tavily not available — returning empty search results.')
+            logger.warning(
+                'Tavily unavailable (enabled=%s, api_key_set=%s) — returning empty search results. '
+                'Install tavily-python and set SEARCH_API_KEY to enable web research.',
+                self.enabled, bool(self.api_key),
+            )
             return []
         try:
             client = TavilyClient(api_key=self.api_key)

@@ -107,7 +107,14 @@ class RecordingService:
         if not self.tts_provider:
             return b''
         try:
-            return self.tts_provider.synthesize_speech(text, speaker=speaker)
+            result = self.tts_provider.synthesize_speech(text, speaker=speaker)
+            if result and len(result) <= 100:
+                logger.warning(
+                    'TTS synthesis returned very short output (%d bytes) — '
+                    'likely fell back to raw text bytes. Check TTS provider configuration.',
+                    len(result),
+                )
+            return result
         except Exception:
             logger.exception('TTS synthesis failed')
             return b''

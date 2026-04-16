@@ -32,7 +32,10 @@ class EdgeTTSProvider(TTSProvider):
     def synthesize_speech(self, text: str, speaker: Optional[str] = None) -> bytes:
         edge_tts = _get_edge_tts()
         if edge_tts is None:
-            # Graceful degradation: return text bytes so caller can display it.
+            logger.warning(
+                'edge-tts package not installed — TTS unavailable, returning raw text bytes. '
+                'Install with: pip install edge-tts'
+            )
             payload = f'{speaker}: {text}' if speaker else text
             return payload.encode('utf-8')
 
@@ -41,9 +44,11 @@ class EdgeTTSProvider(TTSProvider):
             loop = asyncio.new_event_loop()
             result = loop.run_until_complete(self._generate(edge_tts, text, voice))
             loop.close()
+            if not result:
+                logger.warning('Edge TTS synthesis returned empty audio for text: %.80s', text)
             return result
         except Exception:
-            logger.exception('Edge TTS synthesis failed')
+            logger.exception('Edge TTS synthesis failed — returning raw text bytes as fallback')
             payload = f'{speaker}: {text}' if speaker else text
             return payload.encode('utf-8')
 

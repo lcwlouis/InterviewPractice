@@ -17,6 +17,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from evaluation.pipeline import EvaluationPipeline
+from services.provider_registry import build_provider_bundle
 from storage.local_store import save_report_json, save_report_markdown
 
 
@@ -58,7 +59,16 @@ def render() -> None:
         st.info('No evaluations yet — run an interview first.')
         return
 
-    pipeline = EvaluationPipeline()
+    # Build evaluation pipeline with the same provider used in the session.
+    bundle = st.session_state.get('provider_bundle')
+    text_provider = bundle.text_provider if bundle else None
+    pipeline = EvaluationPipeline(text_provider=text_provider)
+
+    if text_provider is None:
+        st.warning(
+            '⚠️ No LLM provider available — retry evaluations will use heuristic scoring only. '
+            'Configure OPENAI_API_KEY or GEMINI_API_KEY for LLM-powered feedback.'
+        )
 
     # Per-question breakdown with retry
     with st.expander('Question-by-Question Breakdown', expanded=True):
@@ -92,12 +102,16 @@ def render() -> None:
                             st.session_state.retry_answers[evaluation.question_id] = []
                         st.session_state.retry_answers[evaluation.question_id].append(retry_text)
 
-                        # Re-evaluate
+                        # Re-evaluate using session interview type when available
                         state = st.session_state.session_state
-                        interview_type = state.interview_type if state else evaluation.answer_analysis.question_id
+                        from models.schemas import InterviewType
+                        interview_type = (
+                            state.interview_type
+                            if state
+                            else InterviewType.BEHAVIOURAL
+                        )
                         retry_eval = pipeline.evaluate_answer(
-                            evaluation.question_id, retry_text,
-                            st.session_state.session_state.interview_type if st.session_state.session_state else evaluations[0].answer_analysis.question_id,
+                            evaluation.question_id, retry_text, interview_type,
                         )
 
                         # Show improvement

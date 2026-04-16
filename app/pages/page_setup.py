@@ -39,9 +39,24 @@ def render() -> None:
             with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as fh:
                 fh.write(uploaded.getbuffer())
                 temp_path = fh.name
-            parsed = parse_resume_to_profile(extract_resume_text(temp_path))
-            st.session_state.candidate_profile = parsed
-            st.success('Resume parsed — review below.')
+            raw_text = extract_resume_text(temp_path)
+            if not raw_text.strip():
+                st.error(
+                    '❌ Resume text extraction returned nothing. '
+                    'Check that `pypdf` (for PDF) or `python-docx` (for DOCX) is installed, '
+                    'and that the file is not password-protected or image-only.'
+                )
+            else:
+                parsed = parse_resume_to_profile(raw_text)
+                st.session_state.candidate_profile = parsed
+                if not parsed.name:
+                    st.warning(
+                        '⚠️ Resume parsed but no name was detected. '
+                        'The parser uses heuristic keyword matching — review and fill in '
+                        'the profile fields below.'
+                    )
+                else:
+                    st.success('Resume parsed — review below.')
 
     # ── Candidate profile ──
     with st.expander('Candidate Profile', expanded=False):
