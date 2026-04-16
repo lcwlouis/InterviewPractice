@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from evaluation.pipeline import EvaluationPipeline
 from interview_engine.planner import InterviewPlanner
@@ -22,7 +22,7 @@ class InterviewSessionEngine:
                 speaker=f'{plan.question.interviewer_type.value.upper()} Interviewer',
                 role=plan.question.interviewer_type.value,
                 text=plan.question.text,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 question_id=plan.question.id,
             )
         )
@@ -34,7 +34,7 @@ class InterviewSessionEngine:
                 speaker='Candidate',
                 role='candidate',
                 text=candidate_answer,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 question_id=question_id,
             )
         )

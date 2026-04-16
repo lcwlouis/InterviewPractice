@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
+import tempfile
 from pathlib import Path
 
 import streamlit as st
@@ -58,9 +59,10 @@ def main() -> None:
     with tabs[0]:
         uploaded = st.file_uploader('Upload resume (PDF or DOCX)', type=['pdf', 'docx'])
         if uploaded and st.button('Parse Resume'):
-            temp_path = f'/tmp/{uploaded.name}'
-            with open(temp_path, 'wb') as file:
+            suffix = Path(uploaded.name).suffix if uploaded.name else '.tmp'
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as file:
                 file.write(uploaded.getbuffer())
+                temp_path = file.name
             parsed = parse_resume_to_profile(extract_resume_text(temp_path))
             st.session_state.candidate_profile = parsed
             st.success('Resume parsed. Review extracted profile in Candidate Profile tab.')

@@ -53,5 +53,9 @@ def parse_resume_to_profile(raw_text: str) -> CandidateProfile:
 
     lower = raw_text.lower()
     if 'target role:' in lower:
-        profile.target_role = raw_text.split('target role:', maxsplit=1)[1].splitlines()[0].strip()
+        marker = 'target role:'
+        marker_idx = lower.find(marker)
+        target_section = raw_text[marker_idx + len(marker):].strip()
+        if target_section:
+            profile.target_role = target_section.splitlines()[0].strip()
     return profile

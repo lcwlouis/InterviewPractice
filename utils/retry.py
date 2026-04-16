@@ -6,6 +6,9 @@ T = TypeVar('T')
 
 
 def call_with_retry(func: Callable[[], T], retries: int = 3, delay_seconds: float = 0.2) -> T:
+    if retries <= 0:
+        raise ValueError('retries must be greater than 0')
+
     last_error: Exception | None = None
     for attempt in range(retries):
         try:
@@ -16,4 +19,4 @@ def call_with_retry(func: Callable[[], T], retries: int = 3, delay_seconds: floa
                 time.sleep(delay_seconds)
     if last_error:
         raise last_error
-    raise RuntimeError('call_with_retry failed without exception')
+    raise RuntimeError('call_with_retry failed unexpectedly')

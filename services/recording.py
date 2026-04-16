@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 
@@ -16,10 +16,10 @@ class RecordingService:
         self.current: Optional[RecordingArtifact] = None
 
     def start(self) -> RecordingArtifact:
-        self.current = RecordingArtifact(audio_path=None, video_path=None, started_at=datetime.utcnow())
+        self.current = RecordingArtifact(audio_path=None, video_path=None, started_at=datetime.now(timezone.utc))
         return self.current
 
     def stop(self) -> Optional[RecordingArtifact]:
         if self.current:
-            self.current.stopped_at = datetime.utcnow()
+            self.current.stopped_at = datetime.now(timezone.utc)
         return self.current
