@@ -154,18 +154,32 @@ def _handle_video_setup() -> None:
     if not st.session_state.get('enable_video', False):
         return
     try:
-        from streamlit_webrtc import webrtc_streamer, WebRtcMode
-        webrtc_streamer(
+        from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
+        rtc_config = RTCConfiguration(
+            {'iceServers': [{'urls': ['stun:stun.l.google.com:19302']}]}
+        )
+        ctx = webrtc_streamer(
             key='video_recorder',
             mode=WebRtcMode.SENDONLY,
+            rtc_configuration=rtc_config,
             media_stream_constraints={'video': True, 'audio': False},
-            desired_playing_state=st.session_state.interview_started,
+            desired_playing_state=st.session_state.get('interview_started', False),
+            async_processing=True,
         )
-        st.caption('📹 Video recording active — will be analyzed for body language after session.')
+        if ctx.state.playing:
+            st.caption('📹 Video recording active — will be analyzed for body language after session.')
+        else:
+            st.caption('📹 Webcam ready — video will start when the interview begins.')
     except ImportError:
         st.info('Install streamlit-webrtc for video recording: `pip install streamlit-webrtc`')
-    except Exception:
-        st.info('WebRTC video unavailable in this environment.')
+    except Exception as e:
+        logger.warning('WebRTC video setup failed: %s', e)
+        st.warning(
+            '⚠️ WebRTC video is unavailable in this environment. '
+            'The interview will continue without video recording.'
+        )
+        # Disable video to prevent further crashes
+        st.session_state['enable_video'] = False
 
 
 def render() -> None:
@@ -231,7 +245,13 @@ def render() -> None:
             st.session_state.engine = engine
             st.session_state.interview_started = True
             st.session_state.start_time = time.time()
-            st.session_state.current_prompt = opening
+
+            # Auto-advance: ask the first question immediately after opening
+            first_question = engine.next_prompt(session_state)
+            if first_question:
+                st.session_state.current_prompt = f'{opening}\n\n{first_question}'
+            else:
+                st.session_state.current_prompt = opening
             st.session_state.session_id = str(uuid.uuid4())[:8]
 
             # Start recording
@@ -311,38 +331,60 @@ def render() -> None:
 
                 if auto_submit and answer and state.asked_question_ids:
                     _submit_answer(engine, state, answer, isettings)
+                    _auto_advance(engine, state)
                     st.rerun()
         else:
-            st.markdown('**Option 1: Speak your answer** (audio will be transcribed automatically)')
+            st.markdown('**🎤 Speak your answer** (audio will be transcribed automatically)')
             # Warn if Gemini is active — it has no standalone transcription endpoint
-            if not bundle.live_audio_provider.supports_live_audio():
-                settings = get_settings()
-                if settings.interview_provider.lower() == 'gemini':
-                    st.warning(
-                        '⚠️ Gemini provider is active but the Live API is not available '
-                        '(missing `google-genai` package or no API key). '
-                        'Audio transcription will fail silently — type your answer instead, '
-                        'or switch to INTERVIEW_PROVIDER=openai for Whisper transcription.'
-                    )
+            settings = get_settings()
+            if settings.interview_provider.lower() == 'gemini':
+                st.warning(
+                    '⚠️ Gemini provider is active but the Live API is not available '
+                    '(missing `google-genai` package or no API key). '
+                    'Audio transcription will fail — type your answer instead, '
+                    'or switch to INTERVIEW_PROVIDER=openai for Whisper transcription.'
+                )
             transcription = _handle_audio_input(state, engine)
             if transcription:
                 answer = transcription
                 if auto_submit and answer and state.asked_question_ids:
                     _submit_answer(engine, state, answer, isettings)
                     _handle_follow_up(engine, state, answer)
+                    _auto_advance(engine, state)
                     st.rerun()
 
-        st.markdown('**Option 2: Type your answer**' if not use_live else '**Or type your answer below**')
-
+    # Text input is ALWAYS available — even when audio is enabled
+    st.markdown('**✍️ Type your answer**')
     answer_text = st.text_area('Type your answer here', height=150, key='candidate_answer')
 
     col_submit, col_follow = st.columns(2)
-    if col_submit.button('Submit Answer') and (answer_text or answer) and state.asked_question_ids:
-        final_answer = answer or answer_text
-        _submit_answer(engine, state, final_answer, isettings)
-        # Generate follow-up
-        _handle_follow_up(engine, state, final_answer)
-        st.rerun()
+    if col_submit.button('Submit Answer'):
+        final_answer = answer_text or answer  # prefer typed text over transcription
+        if not final_answer:
+            st.warning('Please enter or speak an answer before submitting.')
+        elif not state.asked_question_ids:
+            st.warning('No question has been asked yet. Click "Next Question" first.')
+        else:
+            _submit_answer(engine, state, final_answer, isettings)
+            # Generate follow-up
+            _handle_follow_up(engine, state, final_answer)
+            # Auto-advance to next question if no follow-up was generated
+            if not st.session_state.current_prompt or 'Follow-up' not in (st.session_state.current_prompt or ''):
+                next_q = engine.next_prompt(state)
+                if next_q:
+                    st.session_state.current_prompt = next_q
+                else:
+                    # No more questions — wrap up
+                    if state.phase not in (InterviewPhase.CANDIDATE_QUESTIONS, InterviewPhase.WRAP_UP):
+                        state.phase = InterviewPhase.CANDIDATE_QUESTIONS
+                        next_q = engine.next_prompt(state)
+                        if next_q:
+                            st.session_state.current_prompt = next_q
+                        else:
+                            st.session_state.current_prompt = engine.get_wrapup(state)
+                    else:
+                        st.session_state.current_prompt = engine.get_wrapup(state)
+            st.rerun()
 
     # ── Competency progress ──
     if state.competency_coverage:
@@ -359,6 +401,28 @@ def render() -> None:
             st.markdown(f'`{ts}` **You:** {turn.text}')
         else:
             st.markdown(f'`{ts}` **{turn.speaker}:** {turn.text}')
+
+
+def _auto_advance(engine, state):
+    """Auto-advance to next question after answer submission."""
+    # If a follow-up was just generated, don't override it
+    current = st.session_state.current_prompt or ''
+    if 'Follow-up' in current:
+        return
+    next_q = engine.next_prompt(state)
+    if next_q:
+        st.session_state.current_prompt = next_q
+    else:
+        # No more questions in current phase
+        if state.phase not in (InterviewPhase.CANDIDATE_QUESTIONS, InterviewPhase.WRAP_UP):
+            state.phase = InterviewPhase.CANDIDATE_QUESTIONS
+            next_q = engine.next_prompt(state)
+            if next_q:
+                st.session_state.current_prompt = next_q
+            else:
+                st.session_state.current_prompt = engine.get_wrapup(state)
+        else:
+            st.session_state.current_prompt = engine.get_wrapup(state)
 
 
 def _submit_answer(engine, state, answer, isettings):

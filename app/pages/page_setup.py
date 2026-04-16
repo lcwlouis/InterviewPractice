@@ -26,6 +26,7 @@ from models.schemas import (
     PanelMember,
 )
 from research.service import ResearchService
+from services.provider_registry import build_provider_bundle
 
 
 def render() -> None:
@@ -47,13 +48,20 @@ def render() -> None:
                     'and that the file is not password-protected or image-only.'
                 )
             else:
-                parsed = parse_resume_to_profile(raw_text)
+                # Use LLM provider for parsing when available
+                text_provider = None
+                try:
+                    settings = get_settings()
+                    bundle = build_provider_bundle(settings)
+                    text_provider = bundle.text_provider
+                except Exception:
+                    pass
+                parsed = parse_resume_to_profile(raw_text, text_provider=text_provider)
                 st.session_state.candidate_profile = parsed
                 if not parsed.name:
                     st.warning(
                         '⚠️ Resume parsed but no name was detected. '
-                        'The parser uses heuristic keyword matching — review and fill in '
-                        'the profile fields below.'
+                        'Review and fill in the profile fields below.'
                     )
                 else:
                     st.success('Resume parsed — review below.')
@@ -157,3 +165,19 @@ def render() -> None:
         )
 
         st.session_state.interview_settings = isettings
+
+    # ── Persist setup data ──
+    if st.button('💾 Save Setup', help='Save your profile and settings so they persist across refreshes.'):
+        try:
+            from storage.session_store import SessionStore
+            store = SessionStore()
+            store.save_setup_data(
+                candidate_profile=st.session_state.candidate_profile,
+                company_context=st.session_state.company_context,
+                interview_settings=st.session_state.interview_settings,
+                panel_members=st.session_state.panel_members,
+            )
+            store.close()
+            st.success('✅ Setup saved — your data will be restored after refresh.')
+        except Exception:
+            st.error('❌ Could not save setup data. Check the app logs.')

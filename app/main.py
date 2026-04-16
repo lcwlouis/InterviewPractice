@@ -26,7 +26,7 @@ from models.schemas import (  # noqa: E402
 
 
 def _init_state() -> None:
-    """Initialise Streamlit session state with defaults."""
+    """Initialise Streamlit session state with defaults, restoring persisted setup data."""
     settings = get_settings()
     # Map config default_country_preset to enum
     try:
@@ -53,6 +53,25 @@ def _init_state() -> None:
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
+
+    # Restore persisted setup data on first load
+    if '_setup_restored' not in st.session_state:
+        st.session_state['_setup_restored'] = True
+        try:
+            from storage.session_store import SessionStore
+            store = SessionStore()
+            saved = store.load_setup_data()
+            store.close()
+            if 'candidate_profile' in saved:
+                st.session_state['candidate_profile'] = saved['candidate_profile']
+            if 'company_context' in saved:
+                st.session_state['company_context'] = saved['company_context']
+            if 'interview_settings' in saved:
+                st.session_state['interview_settings'] = saved['interview_settings']
+            if 'panel_members' in saved:
+                st.session_state['panel_members'] = saved['panel_members']
+        except Exception:
+            pass  # First run or DB not available yet
 
 
 def main() -> None:

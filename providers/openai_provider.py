@@ -63,7 +63,8 @@ class OpenAIProvider(TextGenerationProvider, LiveAudioProvider, TranscriptionPro
             return '[OpenAI fallback] API call failed — check logs for details.'
 
     def supports_live_audio(self) -> bool:
-        return bool(self.api_key and _get_openai())
+        # OpenAI does not support bidirectional live audio in this integration
+        return False
 
     def transcribe_audio(self, audio_bytes: bytes) -> str:
         client = self._client()

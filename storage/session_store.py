@@ -2,23 +2,32 @@
 
 Implements Suggestion 6: session persistence, history, replay, and
 spaced-repetition tracking for weak competencies.
+Also stores user setup data (profile, company context, settings) so they
+survive page refreshes and app restarts.
 """
 
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 from models.schemas import (
+    CandidateProfile,
+    CompanyContext,
     CompetencyTag,
+    InterviewSettings,
+    PanelMember,
     QuestionEvaluation,
     SessionReport,
     SessionState,
     TranscriptTurn,
 )
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_DB_PATH = Path('storage/db/sessions.sqlite3')
 
@@ -57,6 +66,12 @@ def _ensure_db(db_path: Path) -> sqlite3.Connection:
             competency    TEXT NOT NULL,
             score         REAL NOT NULL,
             recorded_at   TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS user_setup (
+            key         TEXT PRIMARY KEY,
+            value_json  TEXT NOT NULL,
+            updated_at  TEXT NOT NULL
         );
     ''')
     conn.commit()
@@ -203,3 +218,49 @@ class SessionStore:
         if self._conn:
             self._conn.close()
             self._conn = None
+
+    # ── user setup persistence ────────────────────────────────────────
+
+    def save_setup_data(
+        self,
+        candidate_profile: CandidateProfile,
+        company_context: CompanyContext,
+        interview_settings: InterviewSettings,
+        panel_members: list[PanelMember],
+    ) -> None:
+        """Persist user setup data so it survives refresh/restart."""
+        now = datetime.now(timezone.utc).isoformat()
+        data = {
+            'candidate_profile': candidate_profile.model_dump_json(),
+            'company_context': company_context.model_dump_json(),
+            'interview_settings': interview_settings.model_dump_json(),
+            'panel_members': json.dumps([m.model_dump(mode='json') for m in panel_members]),
+        }
+        for key, value_json in data.items():
+            self.conn.execute(
+                'INSERT OR REPLACE INTO user_setup (key, value_json, updated_at) VALUES (?, ?, ?)',
+                (key, value_json, now),
+            )
+        self.conn.commit()
+
+    def load_setup_data(self) -> dict:
+        """Load persisted user setup data. Returns dict with available keys."""
+        result = {}
+        try:
+            rows = self.conn.execute('SELECT key, value_json FROM user_setup').fetchall()
+        except sqlite3.OperationalError:
+            return result
+        for key, value_json in rows:
+            try:
+                if key == 'candidate_profile':
+                    result[key] = CandidateProfile.model_validate_json(value_json)
+                elif key == 'company_context':
+                    result[key] = CompanyContext.model_validate_json(value_json)
+                elif key == 'interview_settings':
+                    result[key] = InterviewSettings.model_validate_json(value_json)
+                elif key == 'panel_members':
+                    raw_list = json.loads(value_json)
+                    result[key] = [PanelMember.model_validate(m) for m in raw_list]
+            except Exception:
+                logger.warning('Failed to load setup data for key: %s', key)
+        return result
