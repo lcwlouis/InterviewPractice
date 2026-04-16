@@ -111,10 +111,8 @@ class SessionStore:
             )
         # Competency history for spaced repetition
         for ev in evaluations:
-            for comp_tag in ev.answer_analysis.transcript_evidence:
-                pass  # transcript evidence is strings not competencies
             score = ev.rubric_score.weighted_total
-            # record the overall score per competency tested
+            # record the overall score per evaluation
             self.conn.execute(
                 'INSERT INTO competency_history (session_id, competency, score, recorded_at) '
                 'VALUES (?, ?, ?, ?)',
