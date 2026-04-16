@@ -70,7 +70,8 @@ class OpenAIProvider(TextGenerationProvider, LiveAudioProvider, TranscriptionPro
         if client is None or not audio_bytes:
             return ''
 
-        import tempfile, os
+        import os
+        import tempfile
         tmp = tempfile.NamedTemporaryFile(suffix='.webm', delete=False)
         try:
             tmp.write(audio_bytes)
