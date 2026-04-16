@@ -1,7 +1,17 @@
+"""Provider registry — builds the correct provider bundle from settings."""
+
+from __future__ import annotations
+
 from dataclasses import dataclass
 
 from backend.config import Settings
-from providers.base import TextGenerationProvider, TTSProvider
+from providers.base import (
+    LiveAudioProvider,
+    MultimodalEvaluationProvider,
+    TextGenerationProvider,
+    TranscriptionProvider,
+    TTSProvider,
+)
 from providers.gemini_provider import GeminiProvider
 from providers.openai_provider import OpenAIProvider
 from providers.tts_edge import EdgeTTSProvider
@@ -10,9 +20,9 @@ from providers.tts_edge import EdgeTTSProvider
 @dataclass
 class ProviderBundle:
     text_provider: TextGenerationProvider
-    transcription_provider: object
-    live_audio_provider: object
-    multimodal_provider: object
+    transcription_provider: TranscriptionProvider
+    live_audio_provider: LiveAudioProvider
+    multimodal_provider: MultimodalEvaluationProvider
     tts_provider: TTSProvider
 
 

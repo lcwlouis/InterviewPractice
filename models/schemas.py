@@ -1,46 +1,32 @@
+"""Core Pydantic schemas for InterviewPractice.
+
+All typed intermediate evaluation artifacts live here so the critique
+pipeline is explicit and traceable — not a single monolithic LLM call.
+"""
+
 from __future__ import annotations
 
 from datetime import datetime
-from enum import Enum
 from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
-
-class InterviewType(str, Enum):
-    BEHAVIOURAL = 'behavioural'
-    TECHNICAL = 'technical'
-    HYBRID = 'hybrid'
-
-
-class InterviewMode(str, Enum):
-    FULL_MOCK = 'full_mock'
-    QUICK_FIRE = 'quick_fire'
-    ONLY_FOLLOW_UPS = 'only_follow_ups'
-    FINAL_ROUND_PANEL = 'final_round_panel'
-    ANSWER_COACHING = 'answer_coaching'
+# Enums are defined in models.enums; re-exported here for convenience.
+from models.enums import (  # noqa: F401
+    AnswerStyle,
+    CompetencyTag,
+    CountryPreset,
+    InterviewerRole,
+    InterviewerTone,
+    InterviewMode,
+    InterviewPhase,
+    InterviewType,
+)
 
 
-class InterviewerRole(str, Enum):
-    HR = 'hr'
-    TECHNICAL = 'technical'
-    SENIOR_LEADERSHIP = 'senior_leadership'
-
-
-class CompetencyTag(str, Enum):
-    LEADERSHIP = 'leadership'
-    CONFLICT_RESOLUTION = 'conflict_resolution'
-    OWNERSHIP = 'ownership'
-    TECHNICAL_DEPTH = 'technical_depth'
-    PROBLEM_SOLVING = 'problem_solving'
-    COLLABORATION = 'collaboration'
-    STAKEHOLDER_MANAGEMENT = 'stakeholder_management'
-    MOTIVATION = 'motivation'
-    ADAPTABILITY = 'adaptability'
-    LEARNING_MINDSET = 'learning_mindset'
-    COMMUNICATION_CLARITY = 'communication_clarity'
-    BUSINESS_AWARENESS = 'business_awareness'
-
+# ---------------------------------------------------------------------------
+# Candidate / Company
+# ---------------------------------------------------------------------------
 
 class CandidateProfile(BaseModel):
     name: str = ''
@@ -53,6 +39,7 @@ class CandidateProfile(BaseModel):
     achievements: List[str] = Field(default_factory=list)
     additional_background: str = ''
     target_role: str = ''
+    target_company: str = ''
 
 
 class CompanyContext(BaseModel):
@@ -61,12 +48,31 @@ class CompanyContext(BaseModel):
     company_values: str = ''
 
 
+# ---------------------------------------------------------------------------
+# Panel / Interviewer configuration
+# ---------------------------------------------------------------------------
+
 class PanelMember(BaseModel):
     name: str
     role_type: InterviewerRole
     title: str = ''
     notes: str = ''
 
+
+class InterviewSettings(BaseModel):
+    """Per-session interview customisation options from the original design."""
+    interview_type: InterviewType = InterviewType.BEHAVIOURAL
+    mode: InterviewMode = InterviewMode.FULL_MOCK
+    answer_style: AnswerStyle = AnswerStyle.STAR
+    interviewer_tone: InterviewerTone = InterviewerTone.NEUTRAL
+    country_preset: CountryPreset = CountryPreset.US
+    time_budget_minutes: int = 20
+    panel_mode: bool = False
+
+
+# ---------------------------------------------------------------------------
+# Question bank & planning
+# ---------------------------------------------------------------------------
 
 class Question(BaseModel):
     id: str
@@ -77,6 +83,7 @@ class Question(BaseModel):
     competencies: List[CompetencyTag]
     difficulty: int = Field(default=2, ge=1, le=5)
     interviewer_type: InterviewerRole
+    phase: InterviewPhase = InterviewPhase.MAIN
 
 
 class QuestionPlan(BaseModel):
@@ -86,7 +93,12 @@ class QuestionPlan(BaseModel):
     follow_up_of_question_id: Optional[str] = None
 
 
+# ---------------------------------------------------------------------------
+# Evaluation artifacts (structured pipeline)
+# ---------------------------------------------------------------------------
+
 class AnswerAnalysis(BaseModel):
+    """Step 1 — Decompose candidate answer into evidence components."""
     question_id: str
     claimed_context: str
     goal_or_task: str
@@ -100,12 +112,14 @@ class AnswerAnalysis(BaseModel):
 
 
 class RubricScore(BaseModel):
+    """Step 2 — Weighted rubric scores per category."""
     category_scores: Dict[str, float]
     weighted_total: float
     reasoning: Dict[str, str]
 
 
 class GapAnalysis(BaseModel):
+    """Step 3 — Identify what is missing from the answer."""
     weak_ownership: bool = False
     vague_results: bool = False
     no_metrics: bool = False
@@ -118,6 +132,7 @@ class GapAnalysis(BaseModel):
 
 
 class CoachingFeedback(BaseModel):
+    """Steps 4–6 — Evidence-grounded feedback + rewrite + coaching."""
     what_worked: List[str]
     what_was_weak: List[str]
     what_was_missing: List[str]
@@ -128,6 +143,7 @@ class CoachingFeedback(BaseModel):
 
 
 class QuestionEvaluation(BaseModel):
+    """Complete per-question evaluation bundle."""
     question_id: str
     answer_analysis: AnswerAnalysis
     rubric_score: RubricScore
@@ -135,23 +151,37 @@ class QuestionEvaluation(BaseModel):
     coaching_feedback: CoachingFeedback
 
 
+# ---------------------------------------------------------------------------
+# Transcript & session state
+# ---------------------------------------------------------------------------
+
 class TranscriptTurn(BaseModel):
     speaker: str
     role: str
     text: str
     timestamp: datetime
     question_id: Optional[str] = None
+    phase: InterviewPhase = InterviewPhase.MAIN
 
 
 class SessionState(BaseModel):
     mode: InterviewMode
     interview_type: InterviewType
+    phase: InterviewPhase = InterviewPhase.OPENING
     asked_question_ids: List[str] = Field(default_factory=list)
     competency_coverage: Dict[CompetencyTag, int] = Field(default_factory=dict)
     resume_areas_covered: List[str] = Field(default_factory=list)
     gaps_not_yet_tested: List[CompetencyTag] = Field(default_factory=list)
     time_budget_minutes: int = 20
+    elapsed_seconds: float = 0.0
+    answer_style: AnswerStyle = AnswerStyle.STAR
+    interviewer_tone: InterviewerTone = InterviewerTone.NEUTRAL
+    country_preset: CountryPreset = CountryPreset.US
 
+
+# ---------------------------------------------------------------------------
+# Session report (final output)
+# ---------------------------------------------------------------------------
 
 class SessionReport(BaseModel):
     overall_summary: str
