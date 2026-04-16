@@ -686,6 +686,232 @@ hybrid:
     difficulty: 3
     interviewer_type: hr
 
+  # --- Additional behavioural questions ---
+  - id: b31
+    text: "Tell me about a time when you had to deliver results under tight resource constraints."
+    interview_type: behavioural
+    seniority: mid
+    role_family: general
+    competencies: [problem_solving, ownership]
+    difficulty: 3
+    interviewer_type: hr
+
+  - id: b32
+    text: "Describe a project where you had to collaborate across time zones."
+    interview_type: behavioural
+    seniority: mid
+    role_family: general
+    competencies: [collaboration, communication_clarity]
+    difficulty: 2
+    interviewer_type: hr
+
+  - id: b33
+    text: "How do you set and track goals for yourself and your team?"
+    interview_type: behavioural
+    seniority: senior
+    role_family: general
+    competencies: [leadership, ownership]
+    difficulty: 3
+    interviewer_type: senior_leadership
+
+  - id: b34
+    text: "Tell me about a time when you had to quickly learn a new tool or technology to solve a problem."
+    interview_type: behavioural
+    seniority: any
+    role_family: general
+    competencies: [learning_mindset, adaptability]
+    difficulty: 2
+    interviewer_type: hr
+
+  - id: b35
+    text: "Give an example of when you simplified a complex process."
+    interview_type: behavioural
+    seniority: mid
+    role_family: general
+    competencies: [problem_solving, communication_clarity]
+    difficulty: 3
+    interviewer_type: hr
+
+  - id: b36
+    text: "Describe a time you had to manage expectations with a client or customer."
+    interview_type: behavioural
+    seniority: mid
+    role_family: general
+    competencies: [stakeholder_management, communication_clarity]
+    difficulty: 3
+    interviewer_type: hr
+
+  - id: b37
+    text: "Tell me about a time when you disagreed with your manager. How did you handle it?"
+    interview_type: behavioural
+    seniority: mid
+    role_family: general
+    competencies: [conflict_resolution, communication_clarity]
+    difficulty: 3
+    interviewer_type: hr
+
+  - id: b38
+    text: "How have you contributed to building a positive team culture?"
+    interview_type: behavioural
+    seniority: any
+    role_family: general
+    competencies: [collaboration, leadership]
+    difficulty: 2
+    interviewer_type: hr
+
+  - id: b39
+    text: "Tell me about a time when you had to make an unpopular decision."
+    interview_type: behavioural
+    seniority: senior
+    role_family: general
+    competencies: [ownership, leadership]
+    difficulty: 4
+    interviewer_type: senior_leadership
+
+  - id: b40
+    text: "Describe a situation where you had to work with ambiguous requirements."
+    interview_type: behavioural
+    seniority: mid
+    role_family: general
+    competencies: [adaptability, problem_solving]
+    difficulty: 3
+    interviewer_type: hr
+
+  - id: t26
+    text: "How do you approach debugging a system you didn't build?"
+    interview_type: technical
+    seniority: mid
+    role_family: engineering
+    competencies: [problem_solving, learning_mindset]
+    difficulty: 3
+    interviewer_type: technical
+
+  - id: t27
+    text: "Describe how you'd design a real-time chat application."
+    interview_type: technical
+    seniority: senior
+    role_family: engineering
+    competencies: [technical_depth, problem_solving]
+    difficulty: 4
+    interviewer_type: technical
+
+  - id: t28
+    text: "How do you handle data integrity in eventually consistent systems?"
+    interview_type: technical
+    seniority: senior
+    role_family: engineering
+    competencies: [technical_depth, problem_solving]
+    difficulty: 5
+    interviewer_type: technical
+
+  - id: t29
+    text: "Tell me about your experience with containerization and orchestration."
+    interview_type: technical
+    seniority: mid
+    role_family: engineering
+    competencies: [technical_depth, learning_mindset]
+    difficulty: 2
+    interviewer_type: technical
+
+  - id: t30
+    text: "How would you design a system for A/B testing at scale?"
+    interview_type: technical
+    seniority: senior
+    role_family: engineering
+    competencies: [technical_depth, business_awareness]
+    difficulty: 4
+    interviewer_type: technical
+
+  - id: h16
+    text: "Tell me about a time when you had to balance innovation with operational stability."
+    interview_type: hybrid
+    seniority: senior
+    role_family: engineering
+    competencies: [business_awareness, technical_depth]
+    difficulty: 4
+    interviewer_type: senior_leadership
+
+  - id: h17
+    text: "How do you approach vendor evaluation and technology selection?"
+    interview_type: hybrid
+    seniority: senior
+    role_family: engineering
+    competencies: [business_awareness, technical_depth]
+    difficulty: 3
+    interviewer_type: senior_leadership
+
+  - id: h18
+    text: "Describe a time when you had to defend your team's technical approach to non-technical leadership."
+    interview_type: hybrid
+    seniority: senior
+    role_family: engineering
+    competencies: [communication_clarity, stakeholder_management]
+    difficulty: 4
+    interviewer_type: senior_leadership
+
+  - id: h19
+    text: "How do you balance technical excellence with time-to-market pressures?"
+    interview_type: hybrid
+    seniority: mid
+    role_family: engineering
+    competencies: [problem_solving, business_awareness]
+    difficulty: 3
+    interviewer_type: hr
+
+  - id: h20
+    text: "Tell me about a time you had to scope down a project to meet a deadline."
+    interview_type: hybrid
+    seniority: mid
+    role_family: engineering
+    competencies: [problem_solving, stakeholder_management]
+    difficulty: 3
+    interviewer_type: hr
+
+  - id: h21
+    text: "How do you ensure knowledge sharing within your team?"
+    interview_type: hybrid
+    seniority: senior
+    role_family: general
+    competencies: [leadership, collaboration]
+    difficulty: 3
+    interviewer_type: senior_leadership
+
+  - id: h22
+    text: "Describe how you approach incident post-mortems."
+    interview_type: hybrid
+    seniority: mid
+    role_family: engineering
+    competencies: [learning_mindset, communication_clarity]
+    difficulty: 3
+    interviewer_type: technical
+
+  - id: h23
+    text: "Tell me about a time when you had to sunset a product or feature."
+    interview_type: hybrid
+    seniority: senior
+    role_family: engineering
+    competencies: [business_awareness, stakeholder_management]
+    difficulty: 4
+    interviewer_type: senior_leadership
+
+  - id: h24
+    text: "How do you evaluate the ROI of engineering investments?"
+    interview_type: hybrid
+    seniority: senior
+    role_family: engineering
+    competencies: [business_awareness, ownership]
+    difficulty: 4
+    interviewer_type: senior_leadership
+
+  - id: h25
+    text: "Describe your approach to managing technical risk in a project."
+    interview_type: hybrid
+    seniority: mid
+    role_family: engineering
+    competencies: [problem_solving, ownership]
+    difficulty: 3
+    interviewer_type: technical
+
 candidate_questions:
   - id: cq1
     text: "Do you have any questions for us?"

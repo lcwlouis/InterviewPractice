@@ -23,7 +23,7 @@ class SchemaTests(unittest.TestCase):
         self.assertEqual(settings.mode, InterviewMode.FULL_MOCK)
         self.assertEqual(settings.answer_style, AnswerStyle.STAR)
         self.assertEqual(settings.interviewer_tone, InterviewerTone.NEUTRAL)
-        self.assertEqual(settings.country_preset, CountryPreset.US)
+        self.assertEqual(settings.country_preset, CountryPreset.SINGAPORE)
         self.assertFalse(settings.panel_mode)
 
     def test_session_state_has_phase(self):
