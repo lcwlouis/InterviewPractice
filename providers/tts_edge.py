@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import io
 import logging
+import threading
 from typing import Optional
 
 from providers.base import TTSProvider
@@ -18,6 +19,32 @@ def _get_edge_tts():  # noqa: ANN202
         return edge_tts
     except ImportError:
         return None
+
+
+def _run_async_in_thread(coro):
+    """Run an async coroutine in a dedicated thread to avoid event-loop conflicts."""
+    result = [None]
+    exception = [None]
+
+    def _target():
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            result[0] = loop.run_until_complete(coro)
+        except Exception as exc:
+            exception[0] = exc
+        finally:
+            loop.close()
+
+    thread = threading.Thread(target=_target, daemon=True)
+    thread.start()
+    thread.join(timeout=30)
+
+    if exception[0] is not None:
+        raise exception[0]
+    if thread.is_alive():
+        raise TimeoutError('Edge TTS call timed out after 30 seconds')
+    return result[0]
 
 
 class EdgeTTSProvider(TTSProvider):
@@ -41,9 +68,7 @@ class EdgeTTSProvider(TTSProvider):
 
         voice = self.DEFAULT_VOICE
         try:
-            loop = asyncio.new_event_loop()
-            result = loop.run_until_complete(self._generate(edge_tts, text, voice))
-            loop.close()
+            result = _run_async_in_thread(self._generate(edge_tts, text, voice))
             if not result:
                 logger.warning('Edge TTS synthesis returned empty audio for text: %.80s', text)
             return result

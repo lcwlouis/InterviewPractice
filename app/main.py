@@ -1,7 +1,8 @@
 """InterviewPractice — Streamlit multi-page app entry point.
 
-Refactored to use Streamlit's native pages/ directory structure
-(Suggestion 14). This file handles global configuration and shared state.
+The page modules live in ``app/views/`` (not ``app/pages/``) to prevent
+Streamlit from auto-discovering them as separate pages, which would
+create duplicate sidebar navigation links.
 """
 
 from __future__ import annotations
@@ -88,28 +89,23 @@ def main() -> None:
     st.sidebar.title('InterviewPractice')
     st.sidebar.caption('AI-powered mock interview with structured critique')
 
-    # Navigation using native multi-page structure
-    pages = {
-        '📝 Setup': 'pages/1_Setup.py',
-        '🎙️ Interview': 'pages/2_Interview.py',
-        '📊 Feedback': 'pages/3_Feedback.py',
-        '📜 History': 'pages/4_History.py',
-        '⚙️ Settings': 'pages/5_Settings.py',
-    }
-
-    page = st.sidebar.radio('Navigation', list(pages.keys()), label_visibility='collapsed')
+    page = st.sidebar.radio(
+        'Navigation',
+        ['📝 Setup', '🎙️ Interview', '📊 Feedback', '📜 History', '⚙️ Settings'],
+        label_visibility='collapsed',
+    )
 
     # Import and run selected page
     if page == '📝 Setup':
-        from pages.page_setup import render
+        from views.page_setup import render
     elif page == '🎙️ Interview':
-        from pages.page_interview import render
+        from views.page_interview import render
     elif page == '📊 Feedback':
-        from pages.page_feedback import render
+        from views.page_feedback import render
     elif page == '📜 History':
-        from pages.page_history import render
+        from views.page_history import render
     else:
-        from pages.page_settings import render
+        from views.page_settings import render
 
     render()
 

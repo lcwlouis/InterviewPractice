@@ -2,7 +2,7 @@
 auto-submit on silence, LLM follow-ups, and TTS playback.
 
 Implements the end-to-end flow:
-  Browser mic → Whisper transcription → LLM question/follow-up →
+  Browser mic → transcription → LLM question/follow-up →
   Edge TTS audio-out → st.audio() playback
 
 When WebRTC video is enabled, frames are recorded for body language analysis.
@@ -120,7 +120,13 @@ def _handle_live_audio_input(state: SessionState, engine: InterviewSessionEngine
         )
 
     if result is None:
+        # Live API failed — fall back to standard transcription via content API
         st.warning('Gemini Live API call failed. Falling back to standard transcription.')
+        rec = _ensure_recording_service()
+        with st.spinner('Transcribing audio…'):
+            transcription = rec.transcribe(audio_bytes)
+        if transcription:
+            return transcription, None, b''
         return None, None, b''
 
     return result.input_transcription or None, result.response_text or None, result.response_audio
@@ -142,7 +148,7 @@ def _handle_audio_input(state: SessionState, engine: InterviewSessionEngine) -> 
         with st.spinner('Transcribing...'):
             transcription = rec.transcribe(audio_bytes)
         if transcription:
-            st.success(f'Transcribed: {transcription[:100]}...' if len(transcription) > 100 else f'Transcribed: {transcription}')
+            st.success(f'📝 Transcribed: {transcription}')
             return transcription
         else:
             st.warning('Could not transcribe audio. Please type your answer or try again.')
@@ -158,18 +164,25 @@ def _handle_video_setup() -> None:
         rtc_config = RTCConfiguration(
             {'iceServers': [{'urls': ['stun:stun.l.google.com:19302']}]}
         )
+
+        # Build media constraints with device selection if specified
+        video_constraints: dict = {'width': {'ideal': 640}, 'height': {'ideal': 480}}
+        video_device = st.session_state.get('selected_video_device')
+        if video_device:
+            video_constraints['deviceId'] = {'exact': video_device}
+
         ctx = webrtc_streamer(
             key='video_recorder',
             mode=WebRtcMode.SENDONLY,
             rtc_configuration=rtc_config,
-            media_stream_constraints={'video': True, 'audio': False},
-            desired_playing_state=st.session_state.get('interview_started', False),
+            media_stream_constraints={'video': video_constraints, 'audio': False},
+            desired_playing_state=True,
             async_processing=True,
         )
-        if ctx.state.playing:
+        if ctx and ctx.state.playing:
             st.caption('📹 Video recording active — will be analyzed for body language after session.')
         else:
-            st.caption('📹 Webcam ready — video will start when the interview begins.')
+            st.caption('📹 Webcam initializing… allow camera access in your browser if prompted.')
     except ImportError:
         st.info('Install streamlit-webrtc for video recording: `pip install streamlit-webrtc`')
     except Exception as e:
@@ -335,15 +348,6 @@ def render() -> None:
                     st.rerun()
         else:
             st.markdown('**🎤 Speak your answer** (audio will be transcribed automatically)')
-            # Warn if Gemini is active — it has no standalone transcription endpoint
-            settings = get_settings()
-            if settings.interview_provider.lower() == 'gemini':
-                st.warning(
-                    '⚠️ Gemini provider is active but the Live API is not available '
-                    '(missing `google-genai` package or no API key). '
-                    'Audio transcription will fail — type your answer instead, '
-                    'or switch to INTERVIEW_PROVIDER=openai for Whisper transcription.'
-                )
             transcription = _handle_audio_input(state, engine)
             if transcription:
                 answer = transcription

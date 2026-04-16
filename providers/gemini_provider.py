@@ -2,6 +2,7 @@
 
 Supports:
 - Text generation via ``google-generativeai`` (legacy REST API)
+- Audio transcription via ``google-generativeai`` content API (audio→text)
 - Live bidirectional audio via ``google-genai`` (Live API / WebSocket)
 """
 
@@ -10,6 +11,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
+import tempfile
+import threading
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -109,6 +113,38 @@ async def _run_live_turn_async(
     return result
 
 
+def _run_async_in_thread(coro):
+    """Run an async coroutine safely, even when a loop is already running.
+
+    Streamlit runs its own asyncio event loop. Calling
+    ``asyncio.new_event_loop().run_until_complete(...)`` from within it
+    can cause conflicts. This helper spins up a *dedicated thread* with
+    its own event loop to avoid those issues.
+    """
+    result = [None]
+    exception = [None]
+
+    def _target():
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            result[0] = loop.run_until_complete(coro)
+        except Exception as exc:
+            exception[0] = exc
+        finally:
+            loop.close()
+
+    thread = threading.Thread(target=_target, daemon=True)
+    thread.start()
+    thread.join(timeout=60)  # 60-second timeout
+
+    if exception[0] is not None:
+        raise exception[0]
+    if thread.is_alive():
+        raise TimeoutError('Gemini Live API call timed out after 60 seconds')
+    return result[0]
+
+
 class GeminiProvider(TextGenerationProvider, LiveAudioProvider, TranscriptionProvider, MultimodalEvaluationProvider):
     def __init__(self, api_key: str, model: str, live_model: str = 'gemini-2.0-flash-live-001') -> None:
         self.api_key = api_key
@@ -149,7 +185,10 @@ class GeminiProvider(TextGenerationProvider, LiveAudioProvider, TranscriptionPro
         system_prompt: str,
         audio_mime_type: str = 'audio/webm',
     ) -> Optional[LiveTurnResult]:
-        """Run one audio turn through the Gemini Live API (synchronous wrapper).
+        """Run one audio turn through the Gemini Live API.
+
+        Uses a dedicated thread with its own event loop to avoid
+        conflicting with Streamlit's running asyncio loop.
 
         Returns a ``LiveTurnResult`` on success, or ``None`` when the Live API
         package is unavailable or the call fails.
@@ -160,19 +199,15 @@ class GeminiProvider(TextGenerationProvider, LiveAudioProvider, TranscriptionPro
             return None
 
         try:
-            loop = asyncio.new_event_loop()
-            try:
-                raw = loop.run_until_complete(
-                    _run_live_turn_async(
-                        api_key=self.api_key,
-                        model=self.live_model,
-                        system_prompt=system_prompt,
-                        audio_bytes=audio_bytes,
-                        audio_mime_type=audio_mime_type,
-                    )
+            raw = _run_async_in_thread(
+                _run_live_turn_async(
+                    api_key=self.api_key,
+                    model=self.live_model,
+                    system_prompt=system_prompt,
+                    audio_bytes=audio_bytes,
+                    audio_mime_type=audio_mime_type,
                 )
-            finally:
-                loop.close()
+            )
 
             return LiveTurnResult(
                 input_transcription=raw.input_transcription.strip(),
@@ -185,17 +220,55 @@ class GeminiProvider(TextGenerationProvider, LiveAudioProvider, TranscriptionPro
             return None
 
     def transcribe_audio(self, audio_bytes: bytes) -> str:
-        # Gemini does not yet offer a separate transcription endpoint.
-        # When using the non-Live audio path with Gemini, transcription is
-        # unavailable — use the Live API path (supports_live_audio) instead.
-        if audio_bytes:
+        """Transcribe audio using Gemini's content API (upload audio as inline data).
+
+        Gemini models accept audio as part of multimodal content, so we send
+        the audio with a transcription prompt to get text back.
+        """
+        if not audio_bytes:
+            return ''
+
+        genai = self._configure()
+        if genai is None:
             logger.warning(
-                'GeminiProvider.transcribe_audio() called but Gemini has no standalone '
-                'transcription endpoint. Audio will NOT be transcribed. '
-                'Set INTERVIEW_PROVIDER=openai for Whisper-based transcription, or '
-                'ensure GEMINI_API_KEY is set so the Live API path is used.'
+                'GeminiProvider.transcribe_audio() — google-generativeai not available '
+                'or API key missing. Cannot transcribe.'
             )
-        return ''
+            return ''
+
+        try:
+            model = genai.GenerativeModel(self.model)
+
+            # Write audio to temp file, then upload
+            tmp = tempfile.NamedTemporaryFile(suffix='.webm', delete=False)
+            try:
+                tmp.write(audio_bytes)
+                tmp.flush()
+                tmp.close()
+
+                # Upload the audio file
+                audio_file = genai.upload_file(tmp.name, mime_type='audio/webm')
+
+                response = model.generate_content(
+                    [
+                        audio_file,
+                        'Transcribe this audio exactly as spoken. '
+                        'Return ONLY the transcription text, nothing else. '
+                        'If you cannot understand the audio, return an empty string.',
+                    ],
+                )
+                text = (response.text or '').strip()
+                # Clean up the uploaded file
+                try:
+                    audio_file.delete()
+                except Exception:
+                    pass
+                return text
+            finally:
+                os.unlink(tmp.name)
+        except Exception:
+            logger.exception('Gemini audio transcription via content API failed')
+            return ''
 
     def evaluate_recording(self, transcript: str, video_path: Optional[str] = None) -> dict:
         genai = self._configure()

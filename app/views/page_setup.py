@@ -164,6 +164,14 @@ def render() -> None:
             help='Automatically submits your answer when silence is detected after you stop speaking.',
         )
 
+        # Device selection hint
+        st.caption(
+            '💡 **Mic / camera device:** Your browser controls which device is used. '
+            'To choose a specific mic or webcam, click the camera/mic icon in your '
+            "browser's address bar (or go to browser Settings → Privacy → Site Settings → "
+            'Camera / Microphone) and select your preferred device before starting the interview.'
+        )
+
         st.session_state.interview_settings = isettings
 
     # ── Persist setup data ──
