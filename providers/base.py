@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from typing import Optional
 
 
@@ -10,10 +11,33 @@ class TextGenerationProvider(ABC):
         raise NotImplementedError
 
 
+@dataclass
+class LiveTurnResult:
+    """Result of one bidirectional Live API turn."""
+    input_transcription: str = ''   # what the candidate said (speech-to-text)
+    response_text: str = ''          # AI interviewer's text response
+    response_audio: bytes = field(default_factory=bytes)  # AI response audio (PCM/16kHz)
+    turn_complete: bool = False
+
+
 class LiveAudioProvider(ABC):
     @abstractmethod
     def supports_live_audio(self) -> bool:
         raise NotImplementedError
+
+    def run_live_turn(
+        self,
+        audio_bytes: bytes,
+        system_prompt: str,
+        audio_mime_type: str = 'audio/webm',
+    ) -> Optional[LiveTurnResult]:
+        """Run one audio turn through the Live API.
+
+        Returns a ``LiveTurnResult`` on success, or ``None`` when the provider
+        does not support Live API (default implementation).  Override in
+        providers that have native Live API support.
+        """
+        return None
 
 
 class TranscriptionProvider(ABC):

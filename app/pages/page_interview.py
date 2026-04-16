@@ -33,6 +33,7 @@ from models.schemas import (
     InterviewSettings,
     SessionState,
 )
+from prompts.templates import LIVE_INTERVIEW_SYSTEM_PROMPT
 from services.provider_registry import build_provider_bundle
 from services.recording import RecordingService
 
@@ -63,6 +64,58 @@ def _play_tts(text: str, speaker: str = 'Interviewer') -> None:
     audio_bytes = rec.synthesize_speech(text, speaker=speaker)
     if audio_bytes and len(audio_bytes) > 100:
         st.audio(audio_bytes, format='audio/mp3', autoplay=True)
+
+
+def _build_live_system_prompt(state: SessionState) -> str:
+    """Build the Live API system prompt from current session context."""
+    candidate = st.session_state.get('candidate_profile')
+    company = st.session_state.get('company_context')
+    current_q = st.session_state.get('current_prompt', '')
+
+    candidate_name = getattr(candidate, 'name', '') or 'Candidate'
+    target_role = getattr(candidate, 'target_role', '') or 'the target role'
+    target_company = getattr(candidate, 'target_company', '') or 'the company'
+    job_desc = getattr(company, 'job_description', '') or 'No job description provided.'
+
+    return LIVE_INTERVIEW_SYSTEM_PROMPT.format(
+        interview_type=state.interview_type.value,
+        interviewer_tone=state.interviewer_tone.value,
+        country_preset=state.country_preset.value,
+        candidate_name=candidate_name,
+        target_role=target_role,
+        target_company=target_company,
+        job_description=job_desc[:1000],
+        current_question=current_q[:500],
+    )
+
+
+def _handle_live_audio_input(state: SessionState, engine: InterviewSessionEngine) -> tuple[str | None, str | None, bytes]:
+    """Handle audio via Gemini Live API. Returns (input_transcription, ai_response_text, ai_response_audio)."""
+    bundle = _ensure_providers()
+    live_provider = bundle.live_audio_provider
+
+    if not live_provider.supports_live_audio():
+        return None, None, b''
+
+    audio_data = st.audio_input('🎤 Speak your answer (Gemini Live)', key='live_audio_input')
+    if not audio_data:
+        return None, None, b''
+
+    audio_bytes = audio_data.getvalue()
+    system_prompt = _build_live_system_prompt(state)
+
+    with st.spinner('Processing with Gemini Live API…'):
+        result = live_provider.run_live_turn(
+            audio_bytes=audio_bytes,
+            system_prompt=system_prompt,
+            audio_mime_type='audio/webm',
+        )
+
+    if result is None:
+        st.warning('Gemini Live API call failed. Falling back to standard transcription.')
+        return None, None, b''
+
+    return result.input_transcription or None, result.response_text or None, result.response_audio
 
 
 def _handle_audio_input(state: SessionState, engine: InterviewSessionEngine) -> str | None:
@@ -211,19 +264,42 @@ def render() -> None:
     st.subheader('Your Answer')
 
     answer = None
-    if enable_audio:
-        st.markdown('**Option 1: Speak your answer** (audio will be transcribed automatically)')
-        transcription = _handle_audio_input(state, engine)
-        if transcription:
-            answer = transcription
-            if auto_submit and answer and state.asked_question_ids:
-                # Auto-submit on audio transcription completion
-                _submit_answer(engine, state, answer, isettings)
-                # Generate follow-up
-                _handle_follow_up(engine, state, answer)
-                st.rerun()
 
-        st.markdown('**Option 2: Type your answer**')
+    if enable_audio:
+        bundle = _ensure_providers()
+        use_live = bundle.live_audio_provider.supports_live_audio()
+
+        if use_live:
+            st.markdown('**🔴 Gemini Live API — speak your answer for real-time AI response**')
+            input_trans, ai_text, ai_audio = _handle_live_audio_input(state, engine)
+
+            if input_trans:
+                st.info(f'📝 You said: {input_trans}')
+                answer = input_trans
+
+                # Show AI response
+                if ai_text:
+                    st.session_state.current_prompt = ai_text
+                    # Play AI audio if available, else fall back to TTS
+                    if ai_audio and len(ai_audio) > 100:
+                        st.audio(ai_audio, format='audio/wav', autoplay=True)
+                    else:
+                        _play_tts(ai_text)
+
+                if auto_submit and answer and state.asked_question_ids:
+                    _submit_answer(engine, state, answer, isettings)
+                    st.rerun()
+        else:
+            st.markdown('**Option 1: Speak your answer** (audio will be transcribed automatically)')
+            transcription = _handle_audio_input(state, engine)
+            if transcription:
+                answer = transcription
+                if auto_submit and answer and state.asked_question_ids:
+                    _submit_answer(engine, state, answer, isettings)
+                    _handle_follow_up(engine, state, answer)
+                    st.rerun()
+
+        st.markdown('**Option 2: Type your answer**' if not use_live else '**Or type your answer below**')
 
     answer_text = st.text_area('Type your answer here', height=150, key='candidate_answer')
 

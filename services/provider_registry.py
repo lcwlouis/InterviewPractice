@@ -28,7 +28,7 @@ class ProviderBundle:
 
 def build_provider_bundle(settings: Settings) -> ProviderBundle:
     if settings.interview_provider.lower() == 'gemini':
-        provider = GeminiProvider(settings.gemini_api_key, settings.gemini_model)
+        provider = GeminiProvider(settings.gemini_api_key, settings.gemini_model, settings.gemini_live_model)
     else:
         provider = OpenAIProvider(settings.openai_api_key, settings.openai_model)
 
