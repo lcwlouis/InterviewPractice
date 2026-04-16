@@ -70,9 +70,10 @@ async def _run_live_turn_async(
     client = genai.Client(api_key=api_key)
 
     config = types.LiveConnectConfig(
-        response_modalities=['TEXT'],
+        response_modalities=['AUDIO', 'TEXT'],
         system_instruction=system_prompt,
         input_audio_transcription=types.AudioTranscriptionConfig(),
+        output_audio_transcription=types.AudioTranscriptionConfig(),
     )
 
     result = _LiveResponse()
