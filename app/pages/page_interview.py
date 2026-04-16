@@ -173,7 +173,7 @@ def _handle_video_setup() -> None:
     except ImportError:
         st.info('Install streamlit-webrtc for video recording: `pip install streamlit-webrtc`')
     except Exception as e:
-        logger.warning('WebRTC video setup failed: %s', e)
+        logger.exception('WebRTC video setup failed: %s', e)
         st.warning(
             '⚠️ WebRTC video is unavailable in this environment. '
             'The interview will continue without video recording.'

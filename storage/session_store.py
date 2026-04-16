@@ -262,5 +262,5 @@ class SessionStore:
                     raw_list = json.loads(value_json)
                     result[key] = [PanelMember.model_validate(m) for m in raw_list]
             except Exception:
-                logger.warning('Failed to load setup data for key: %s', key)
+                logger.exception('Failed to load setup data for key: %s', key)
         return result
