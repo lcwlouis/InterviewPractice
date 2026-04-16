@@ -14,7 +14,8 @@ class Settings(BaseSettings):
     gemini_model: str = Field(default='gemini-2.5-pro', alias='GEMINI_MODEL')
     app_log_level: str = Field(default='INFO', alias='APP_LOG_LEVEL')
     enable_web_research: bool = Field(default=False, alias='ENABLE_WEB_RESEARCH')
-    default_country_preset: str = Field(default='US', alias='DEFAULT_COUNTRY_PRESET')
+    default_country_preset: str = Field(default='SG', alias='DEFAULT_COUNTRY_PRESET')
+    search_api_key: str = Field(default='', alias='SEARCH_API_KEY')
 
 
 @lru_cache(maxsize=1)

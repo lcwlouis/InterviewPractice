@@ -65,7 +65,7 @@ class InterviewSettings(BaseModel):
     mode: InterviewMode = InterviewMode.FULL_MOCK
     answer_style: AnswerStyle = AnswerStyle.STAR
     interviewer_tone: InterviewerTone = InterviewerTone.NEUTRAL
-    country_preset: CountryPreset = CountryPreset.US
+    country_preset: CountryPreset = CountryPreset.SINGAPORE
     time_budget_minutes: int = 20
     panel_mode: bool = False
 
@@ -176,7 +176,7 @@ class SessionState(BaseModel):
     elapsed_seconds: float = 0.0
     answer_style: AnswerStyle = AnswerStyle.STAR
     interviewer_tone: InterviewerTone = InterviewerTone.NEUTRAL
-    country_preset: CountryPreset = CountryPreset.US
+    country_preset: CountryPreset = CountryPreset.SINGAPORE
 
 
 # ---------------------------------------------------------------------------

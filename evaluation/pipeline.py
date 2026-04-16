@@ -1,6 +1,15 @@
+"""Evaluation pipeline — structured answer analysis with optional LLM enhancement.
+
+Implements Suggestion 5: LLM-enhanced evaluation with heuristic fallback.
+When a text provider is set, answers are sent to the LLM for richer analysis.
+The heuristic pipeline always runs as a reliable baseline / fallback.
+"""
+
 import json
+import logging
 import re
 from statistics import mean
+from typing import Optional
 
 from evaluation.rubrics import RUBRIC_WEIGHTS
 from models.schemas import (
@@ -12,10 +21,49 @@ from models.schemas import (
     RubricScore,
     SessionReport,
 )
+from prompts.templates import (
+    ANSWER_DECOMPOSITION_PROMPT,
+    COACHING_FEEDBACK_PROMPT,
+    EVALUATION_SYSTEM_PROMPT,
+    GAP_ANALYSIS_PROMPT,
+    RUBRIC_SCORING_PROMPT,
+)
+from providers.base import TextGenerationProvider
+
+logger = logging.getLogger(__name__)
 
 
 class EvaluationPipeline:
-    def decompose_answer(self, question_id: str, answer_text: str) -> AnswerAnalysis:
+    def __init__(self, text_provider: Optional[TextGenerationProvider] = None) -> None:
+        self.text_provider = text_provider
+
+    # ── LLM helpers ───────────────────────────────────────────────────
+
+    def _llm_call(self, prompt: str) -> Optional[dict]:
+        """Call the LLM and parse JSON response. Returns None on failure."""
+        if self.text_provider is None:
+            return None
+        try:
+            raw = self.text_provider.generate_text(prompt, system_prompt=EVALUATION_SYSTEM_PROMPT)
+            if raw.startswith('[') or raw.startswith('{'):
+                return json.loads(raw)
+            # Try to extract JSON from markdown code blocks
+            match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', raw, re.DOTALL)
+            if match:
+                return json.loads(match.group(1))
+            # Try to find JSON object in the response
+            start = raw.find('{')
+            end = raw.rfind('}')
+            if start != -1 and end != -1:
+                return json.loads(raw[start:end + 1])
+            return None
+        except Exception:
+            logger.exception('LLM evaluation call failed — falling back to heuristic')
+            return None
+
+    # ── heuristic decomposition (always available) ────────────────────
+
+    def _heuristic_decompose(self, question_id: str, answer_text: str) -> AnswerAnalysis:
         snippets = [s.strip() for s in re.split(r'[.!?]', answer_text) if s.strip()]
 
         def pick(*keywords: str) -> str:
@@ -46,9 +94,37 @@ class EvaluationPipeline:
             analysis.missing_evidence.append('No explicit learning/reflection provided.')
         return analysis
 
+    # ── LLM-enhanced decomposition ───────────────────────────────────
+
+    def decompose_answer(self, question_id: str, answer_text: str) -> AnswerAnalysis:
+        # Try LLM first
+        prompt = ANSWER_DECOMPOSITION_PROMPT.format(answer_text=answer_text[:3000])
+        llm_result = self._llm_call(prompt)
+        if llm_result:
+            try:
+                llm_result['question_id'] = question_id
+                return AnswerAnalysis.model_validate(llm_result)
+            except Exception:
+                logger.warning('LLM decomposition parse failed — using heuristic')
+        # Fallback to heuristic
+        return self._heuristic_decompose(question_id, answer_text)
+
     def score_rubric(self, analysis: AnswerAnalysis, interview_type: InterviewType) -> RubricScore:
         weights = RUBRIC_WEIGHTS[interview_type]
 
+        # Try LLM scoring
+        prompt = RUBRIC_SCORING_PROMPT.format(
+            answer_analysis_json=analysis.model_dump_json(),
+            rubric_weights_json=json.dumps(weights),
+        )
+        llm_result = self._llm_call(prompt)
+        if llm_result:
+            try:
+                return RubricScore.model_validate(llm_result)
+            except Exception:
+                logger.warning('LLM rubric scoring parse failed — using heuristic')
+
+        # Heuristic fallback
         def binary_score(value: str) -> float:
             return 9.0 if value else 3.0
 
@@ -73,6 +149,16 @@ class EvaluationPipeline:
         return RubricScore(category_scores=category_scores, weighted_total=round(weighted_total, 2), reasoning=reasoning)
 
     def analyze_gaps(self, analysis: AnswerAnalysis) -> GapAnalysis:
+        # Try LLM gap analysis
+        prompt = GAP_ANALYSIS_PROMPT.format(answer_analysis_json=analysis.model_dump_json())
+        llm_result = self._llm_call(prompt)
+        if llm_result:
+            try:
+                return GapAnalysis.model_validate(llm_result)
+            except Exception:
+                logger.warning('LLM gap analysis parse failed — using heuristic')
+
+        # Heuristic fallback
         text = ' '.join(analysis.transcript_evidence).lower()
         has_metric = bool(re.search(r'\b\d+%?\b', text))
         has_result_statement = bool(analysis.result_outcome)
@@ -100,7 +186,24 @@ class EvaluationPipeline:
             improvements.append('Close with reflection and what you would improve.')
         return ' '.join(improvements) or 'Keep concise structure and explicit action-outcome links.'
 
-    def build_coaching_feedback(self, analysis: AnswerAnalysis, gap: GapAnalysis, rewrite_outline: str) -> CoachingFeedback:
+    def build_coaching_feedback(
+        self, analysis: AnswerAnalysis, gap: GapAnalysis, rewrite_outline: str,
+        answer_style: str = 'star',
+    ) -> CoachingFeedback:
+        # Try LLM coaching
+        prompt = COACHING_FEEDBACK_PROMPT.format(
+            answer_analysis_json=analysis.model_dump_json(),
+            gap_analysis_json=gap.model_dump_json(),
+            answer_style=answer_style,
+        )
+        llm_result = self._llm_call(prompt)
+        if llm_result:
+            try:
+                return CoachingFeedback.model_validate(llm_result)
+            except Exception:
+                logger.warning('LLM coaching feedback parse failed — using heuristic')
+
+        # Heuristic fallback
         missing = []
         if gap.no_metrics:
             missing.append('Quantitative impact metrics')
